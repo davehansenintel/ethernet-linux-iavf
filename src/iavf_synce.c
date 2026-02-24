@@ -199,12 +199,27 @@ void iavf_virtchnl_synce_get_hw_info(struct iavf_adapter *adapter, void *data,
 	struct iavf_synce *synce = &adapter->synce;
 	struct device *dev = &adapter->pdev->dev;
 	struct virtchnl_synce_get_hw_info *msg;
+	u8 num_pins;
 
-	if (len >= sizeof(*msg)) {
-		msg = data;
-	} else {
+	if (len < sizeof(*msg)) {
 		dev_err_once(dev, "Invalid hw info. Got size %u, expected %lu\n",
 			     len, sizeof(*msg));
+		return;
+	}
+
+	msg = data;
+	num_pins = msg->len;
+
+	if (num_pins > IAVF_MAX_CGU_PIN_NUM) {
+		dev_err_once(dev, "Too many CGU pins reported. Got %u, max %d\n",
+			     num_pins, IAVF_MAX_CGU_PIN_NUM);
+		return;
+	}
+
+	if (num_pins > 1 &&
+	    len < sizeof(*msg) + (num_pins - 1) * sizeof(struct virtchnl_cgu_pin)) {
+		dev_err_once(dev, "Insufficient hw info length for %u pins. Got size %u\n",
+			     num_pins, len);
 		return;
 	}
 
@@ -215,7 +230,7 @@ void iavf_virtchnl_synce_get_hw_info(struct iavf_adapter *adapter, void *data,
 
 	/* retrieve cgu pins */
 	memcpy(&adapter->synce.cgu_pins, msg->pins,
-	       msg->len * sizeof(struct virtchnl_cgu_pin));
+	       num_pins * sizeof(struct virtchnl_cgu_pin));
 	synce->hw_info_ready = true;
 }
 
